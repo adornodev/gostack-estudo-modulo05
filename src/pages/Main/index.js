@@ -1,14 +1,16 @@
 import React, { Component } from 'react';
 import { FaGithubAlt, FaPlus, FaSpinner } from 'react-icons/fa';
 import { Link } from 'react-router-dom';
+import Container from '../../components/Container';
 import api from '../../services/api';
-import { Container, Form, RepositoresList, SubmitButton } from './styles';
+import { Form, List, SubmitButton } from './styles';
 
 export default class Main extends Component {
   state = {
     newRepo: '',
     repositories: [],
-    isLoading: false,
+    loading: false,
+    error: null,
   };
 
   componentDidMount() {
@@ -28,72 +30,88 @@ export default class Main extends Component {
   }
 
   handleInputChange = e => {
-    this.setState({ newRepo: e.target.value });
+    this.setState({ newRepo: e.target.value, error: null });
   };
 
   handleSubmit = async e => {
-    // Evita que o formulario dê um refresh na página
     e.preventDefault();
 
-    const { newRepo, repositories } = this.state;
+    this.setState({ loading: true, error: false });
 
-    this.setState({ isLoading: true });
+    try {
+      const { newRepo, repositories } = this.state;
 
-    const response = await api.get(`/repos/${newRepo}`);
+      if (newRepo === '') throw new Error('Você não indicou um repositório.');
 
-    const data = {
-      name: response.data.full_name,
-      avatar_url: response.data.owner.avatar_url,
-    };
+      const repoExists = repositories.find(r => r.name === newRepo);
 
-    const uniqueRepositories = [...repositories, data].filter(
-      (elem, index, self) =>
-        self.findIndex(t => {
-          return t.name === elem.name;
-        }) === index
-    );
+      if (repoExists) throw new Error('Esse repositório já existe na lista.');
 
-    this.setState({
-      repositories: uniqueRepositories,
-      newRepo: '',
-      isLoading: false,
-    });
+      const response = await api.get(`/repos/${newRepo}`);
+
+      const data = {
+        name: response.data.full_name,
+      };
+
+      this.setState({
+        repositories: [...repositories, data],
+        newRepo: '',
+      });
+    } catch (error) {
+      if (error.response && error.response.status === 404) {
+        this.setState({
+          error: 'Esse repositório não existe!',
+          newRepo: '',
+        });
+
+        return;
+      }
+      this.setState({
+        error: error.message,
+        newRepo: '',
+      });
+    } finally {
+      this.setState({ loading: false });
+    }
   };
 
   render() {
-    const { newRepo, isLoading, repositories } = this.state;
+    const { newRepo, repositories, loading, error } = this.state;
+
     return (
       <Container>
         <h1>
-          <FaGithubAlt></FaGithubAlt>
+          <FaGithubAlt />
           Repositórios
         </h1>
-        <Form onSubmit={this.handleSubmit}>
+
+        <Form onSubmit={this.handleSubmit} error={error}>
           <input
             type="text"
-            placeholder="Adicionar Repositório"
+            placeholder={error || 'Adicionar repositório'}
             value={newRepo}
             onChange={this.handleInputChange}
-          ></input>
-          <SubmitButton isLoading={isLoading}>
-            {isLoading ? (
-              <FaSpinner color="#FFF" size={14}></FaSpinner>
+          />
+
+          <SubmitButton loading={loading}>
+            {loading ? (
+              <FaSpinner color="#FFF" size={14} />
             ) : (
-              <FaPlus color="#FFF" size={14}></FaPlus>
+              <FaPlus color="#FFF" size={14} />
             )}
           </SubmitButton>
         </Form>
 
-        <RepositoresList>
-          {repositories.map(repo => (
-            <li key={repo.name}>
-              <span>{repo.name}</span>
-              <Link to={`/repository/${encodeURIComponent(repo.name)}`}>
+        <List>
+          {repositories.map(repository => (
+            <li key={repository.name}>
+              <span>{repository.name}</span>
+              <Link to={`/repository/${encodeURIComponent(repository.name)}`}>
                 Detalhes
               </Link>
             </li>
           ))}
-        </RepositoresList>
+        </List>
       </Container>
     );
   }
